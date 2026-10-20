@@ -153,8 +153,9 @@ void main() {
         void loaded() {
           if (!state.loadingArticle &&
               state.selectedSummary != null &&
-              !done.isCompleted)
+              !done.isCompleted) {
             done.complete();
+          }
         }
 
         state.addListener(loaded);
