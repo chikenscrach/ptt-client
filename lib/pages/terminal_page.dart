@@ -1,9 +1,8 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../app_model.dart';
-import '../services/terminal.dart';
+import '../widgets/terminal_view.dart';
 import '../services/ptt_session.dart';
 
 class TerminalPage extends StatefulWidget {
@@ -16,16 +15,12 @@ class TerminalPage extends StatefulWidget {
 class _TerminalPageState extends State<TerminalPage> {
   final _input = TextEditingController();
   final _focus = FocusNode();
-  final _transform = TransformationController();
-  final _glyphs = <String, TextPainter>{};
-  double? _width;
   bool _resuming = false;
   PttSession get session => widget.model.session;
   @override
   void dispose() {
     _input.dispose();
     _focus.dispose();
-    _transform.dispose();
     super.dispose();
   }
 
@@ -117,82 +112,52 @@ class _TerminalPageState extends State<TerminalPage> {
       Expanded(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: ColoredBox(
-              color: Colors.black,
-              child: LayoutBuilder(
-                builder: (context, size) {
-                  final width = math
-                      .min(size.maxWidth / 720, size.maxHeight / 440)
-                      .clamp(0.25, 1.3);
-                  if (_width != size.maxWidth) {
-                    _width = size.maxWidth;
-                    _transform.value = Matrix4.diagonal3Values(width, width, 1);
-                  }
-                  return Focus(
-                    focusNode: _focus,
-                    onKeyEvent: (_, event) {
-                      if (event is! KeyDownEvent && event is! KeyRepeatEvent ||
-                          !session.connected ||
-                          session.busy) {
-                        return KeyEventResult.ignored;
-                      }
-                      final keys = {
-                        LogicalKeyboardKey.arrowUp: '\x1b[A',
-                        LogicalKeyboardKey.arrowDown: '\x1b[B',
-                        LogicalKeyboardKey.arrowRight: '\x1b[C',
-                        LogicalKeyboardKey.arrowLeft: '\x1b[D',
-                        LogicalKeyboardKey.enter: '\r',
-                        LogicalKeyboardKey.numpadEnter: '\r',
-                        LogicalKeyboardKey.escape: '\x1b',
-                        LogicalKeyboardKey.backspace: '\x7f',
-                        LogicalKeyboardKey.pageUp: '\x1b[5~',
-                        LogicalKeyboardKey.pageDown: '\x1b[6~',
-                        LogicalKeyboardKey.home: '\x1b[H',
-                        LogicalKeyboardKey.end: '\x1b[F',
-                        LogicalKeyboardKey.tab: '\t',
-                      };
-                      final mapped = keys[event.logicalKey];
-                      if (mapped != null) {
-                        _send(mapped);
-                        return KeyEventResult.handled;
-                      }
-                      if (HardwareKeyboard.instance.isControlPressed) {
-                        final label = event.logicalKey.keyLabel.toUpperCase();
-                        if (label.length == 1 &&
-                            label.codeUnitAt(0) >= 65 &&
-                            label.codeUnitAt(0) <= 90) {
-                          _send(String.fromCharCode(label.codeUnitAt(0) - 64));
-                          return KeyEventResult.handled;
-                        }
-                      }
-                      if (event.character?.isNotEmpty == true) {
-                        _send(event.character!);
-                        return KeyEventResult.handled;
-                      }
-                      return KeyEventResult.ignored;
-                    },
-                    child: GestureDetector(
-                      onTap: _focus.requestFocus,
-                      child: InteractiveViewer(
-                        transformationController: _transform,
-                        constrained: false,
-                        minScale: 0.25,
-                        maxScale: 3,
-                        boundaryMargin: const EdgeInsets.all(24),
-                        child: Semantics(
-                          label: 'PTT 終端畫面：${session.screen.text}',
-                          child: CustomPaint(
-                            size: const Size(720, 440),
-                            painter: _TerminalPainter(session.screen, _glyphs),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+          child: Focus(
+            focusNode: _focus,
+            onKeyEvent: (_, event) {
+              if (event is! KeyDownEvent && event is! KeyRepeatEvent ||
+                  !session.connected ||
+                  session.busy) {
+                return KeyEventResult.ignored;
+              }
+              final keys = {
+                LogicalKeyboardKey.arrowUp: '\x1b[A',
+                LogicalKeyboardKey.arrowDown: '\x1b[B',
+                LogicalKeyboardKey.arrowRight: '\x1b[C',
+                LogicalKeyboardKey.arrowLeft: '\x1b[D',
+                LogicalKeyboardKey.enter: '\r',
+                LogicalKeyboardKey.numpadEnter: '\r',
+                LogicalKeyboardKey.escape: '\x1b',
+                LogicalKeyboardKey.backspace: '\x7f',
+                LogicalKeyboardKey.pageUp: '\x1b[5~',
+                LogicalKeyboardKey.pageDown: '\x1b[6~',
+                LogicalKeyboardKey.home: '\x1b[H',
+                LogicalKeyboardKey.end: '\x1b[F',
+                LogicalKeyboardKey.tab: '\t',
+              };
+              final mapped = keys[event.logicalKey];
+              if (mapped != null) {
+                _send(mapped);
+                return KeyEventResult.handled;
+              }
+              if (HardwareKeyboard.instance.isControlPressed) {
+                final label = event.logicalKey.keyLabel.toUpperCase();
+                if (label.length == 1 &&
+                    label.codeUnitAt(0) >= 65 &&
+                    label.codeUnitAt(0) <= 90) {
+                  _send(String.fromCharCode(label.codeUnitAt(0) - 64));
+                  return KeyEventResult.handled;
+                }
+              }
+              if (event.character?.isNotEmpty == true) {
+                _send(event.character!);
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: GestureDetector(
+              onTap: _focus.requestFocus,
+              child: TerminalView(screen: session.screen),
             ),
           ),
         ),
@@ -342,80 +307,4 @@ class _LoginDialogState extends State<_LoginDialog> {
       FilledButton(onPressed: _submit, child: const Text('登入')),
     ],
   );
-}
-
-class _TerminalPainter extends CustomPainter {
-  _TerminalPainter(this.screen, this.glyphs);
-  final TerminalScreen screen;
-  final Map<String, TextPainter> glyphs;
-  static const _colors = [
-    Color(0xff080b0e),
-    Color(0xffdf6d78),
-    Color(0xff70d69c),
-    Color(0xffe3cc7a),
-    Color(0xff80a9e7),
-    Color(0xffc19ce8),
-    Color(0xff7ad4d9),
-    Color(0xffd7dfe7),
-  ];
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cellWidth = size.width / screen.columns;
-    final cellHeight = size.height / screen.rows;
-    for (var row = 0; row < screen.rows; row++) {
-      for (var col = 0; col < screen.columns; col++) {
-        final cell = screen.cells[row][col];
-        if (cell.bg != 0) {
-          canvas.drawRect(
-            Rect.fromLTWH(
-              col * cellWidth,
-              row * cellHeight,
-              cellWidth,
-              cellHeight,
-            ),
-            Paint()..color = _colors[cell.bg],
-          );
-        }
-        if (cell.text.isEmpty || cell.text == ' ') continue;
-        final key = '${cell.fg}/${cell.bold}/${cell.text}';
-        final painter = glyphs.putIfAbsent(
-          key,
-          () => TextPainter(
-            text: TextSpan(
-              text: cell.text,
-              style: TextStyle(
-                fontFamily: 'monospace',
-                fontFamilyFallback: const [
-                  'Microsoft JhengHei',
-                  'Noto Sans Mono CJK TC',
-                ],
-                color: cell.bold
-                    ? Color.lerp(_colors[cell.fg], Colors.white, 0.25)
-                    : _colors[cell.fg],
-                fontSize: 14,
-                fontWeight: cell.bold ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout(),
-        );
-        painter.paint(canvas, Offset(col * cellWidth, row * cellHeight));
-      }
-    }
-    canvas.drawRect(
-      Rect.fromLTWH(
-        screen.column.clamp(0, screen.columns - 1) * cellWidth,
-        screen.row * cellHeight,
-        cellWidth,
-        cellHeight,
-      ),
-      Paint()
-        ..color = Colors.white.withValues(alpha: 0.35)
-        ..style = PaintingStyle.stroke,
-    );
-    if (glyphs.length > 4096) glyphs.clear();
-  }
-
-  @override
-  bool shouldRepaint(covariant _TerminalPainter oldDelegate) => true;
 }

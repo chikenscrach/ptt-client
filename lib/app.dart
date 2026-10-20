@@ -553,7 +553,11 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
     }
     return _empty(
       icon: Icons.chrome_reader_mode_outlined,
-      title: model.loadingArticle ? '正在載入文章…' : '選一篇，開始閱讀',
+      title: model.loadingArticle
+          ? '正在載入文章…'
+          : model.articleError != null
+          ? '無法讀取文章'
+          : '選一篇，開始閱讀',
       message: model.articleError ?? '文章中的連結可直接預覽，點擊即可在 App 內瀏覽。',
       action: model.articleError != null && model.selectedSummary != null
           ? () => _run(() => model.openArticle(model.selectedSummary!))
@@ -620,7 +624,7 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
         const Divider(),
         const ListTile(
           title: Text('關於 PTT Client'),
-          subtitle: Text('0.1.1・Windows / Android\n獨立第三方客戶端，非 PTT 官方產品。'),
+          subtitle: Text('0.1.2・Windows / Android\n獨立第三方客戶端，非 PTT 官方產品。'),
         ),
         ListTile(
           title: const Text('專案與使用說明'),
@@ -634,7 +638,7 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
           onTap: () => showLicensePage(
             context: context,
             applicationName: 'PTT Client',
-            applicationVersion: '0.1.1',
+            applicationVersion: '0.1.2',
           ),
         ),
       ],

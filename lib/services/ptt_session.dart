@@ -280,6 +280,8 @@ class PttSession extends ChangeNotifier {
       RegExp(r'文章選讀|文章列表').hasMatch(screen.bottomText);
 
   bool _atBoard(String name) =>
+      !_boardEntryPrompt &&
+      !_articleInfoOpen &&
       _boardListCaption &&
       RegExp(
         '看板\\s*《\\s*${RegExp.escape(name)}\\s*》',
@@ -287,6 +289,8 @@ class PttSession extends ChangeNotifier {
       ).hasMatch(screen.text.split('\n').take(2).join('\n'));
 
   bool get _inBoardList =>
+      !_boardEntryPrompt &&
+      !_articleInfoOpen &&
       _boardListCaption &&
       RegExp(r'看板\s*《').hasMatch(screen.text.split('\n').take(2).join('\n'));
 
@@ -296,17 +300,18 @@ class PttSession extends ChangeNotifier {
   // Require a new response and allow a split WebSocket redraw to finish.
   Future<void> _readCommand(String keys, bool Function() ready) async {
     final revision = _revision;
+    final clock = Stopwatch()..start();
     _send(keys);
-    await _wait(() => _revision > revision && ready());
-    for (var i = 0; i < 4; i++) {
+    while (clock.elapsed < responseTimeout) {
+      await _wait(
+        () => _revision > revision && ready(),
+        timeout: responseTimeout - clock.elapsed,
+      );
       final last = _revision;
       await Future<void>.delayed(screenSettle);
       if (_revision == last && ready()) return;
-      await _wait(ready);
     }
-    if (!ready()) {
-      throw const PttSessionException('PTT 畫面尚未完整，請查看終端後重新整理。');
-    }
+    throw const PttSessionException('PTT 畫面尚未完整，請查看終端後重新整理。');
   }
 
   Future<T> _queueRead<T>(Future<T> Function() action) {
@@ -321,8 +326,31 @@ class PttSession extends ChangeNotifier {
     return result;
   }
 
-  bool get _boardEntryPrompt =>
-      RegExp(r'看板名稱|請輸入.*看板|進入.*看板|選擇看板').hasMatch(screen.text);
+  bool get _boardEntryPrompt => RegExp(
+    r'^\s*(?:請輸入看板名稱[^\n]*|(?:看板名稱|選擇看板)\s*[:：][^\n]*)$',
+    multiLine: true,
+  ).hasMatch(screen.text);
+
+  bool get _articleInfoOpen =>
+      RegExp(
+        r'文章代碼\s*\(AID\)\s*[:：]\s*#[0-9A-Za-z_-]{8}',
+      ).hasMatch(screen.text) &&
+      RegExp(r'任意鍵|再按 Q').hasMatch(screen.text);
+
+  bool get _inBoardChooser =>
+      !_boardEntryPrompt &&
+      !_inBoardList &&
+      RegExp(r'我的最愛|看板列表|分類看板|分組討論區').hasMatch(
+        screen.text.split('\n').take(3).join('\n') + screen.bottomText,
+      );
+
+  bool _chooserSelects(String name) =>
+      _inBoardChooser &&
+      RegExp(
+        '^\\s*[●>→]\\s*\\d+\\s*(?:[ˇvV+*~!xX-]\\s*)?${RegExp.escape(name)}(?:\\s|\$)',
+        multiLine: true,
+        caseSensitive: false,
+      ).hasMatch(screen.text);
 
   bool get _readBlocked => RegExp(
     r'沒有.*權限|無此看板|找不到.*看板|不存在|禁止進入|無法進入|無法建立',
@@ -330,27 +358,42 @@ class PttSession extends ChangeNotifier {
 
   Future<void> _enterBoard(String name) async {
     if (!isBoardName(name)) throw const PttSessionException('看板名稱格式不正確。');
+    // Recover only known, read-only dialogs left by an interrupted read.
+    if (_articleInfoOpen) {
+      await _readCommand(' \x0c', () => _inBoardList || _mainMenu);
+    }
+    if (_boardEntryPrompt) {
+      await _readCommand(
+        '\x03',
+        () =>
+            !_boardEntryPrompt &&
+            (_inBoardChooser || _inBoardList || _mainMenu),
+      );
+    }
     if (_atBoard(name)) return;
     if (_inArticle) {
       await _readCommand('\x1b[D', () => _inBoardList || _mainMenu);
       if (_atBoard(name)) return;
     }
-    if (!_mainMenu &&
-        !_inBoardList &&
-        !RegExp(
-          r'我的最愛|看板列表',
-        ).hasMatch(screen.text.split('\n').take(3).join('\n'))) {
+    if (!_mainMenu && !_inBoardList && !_inBoardChooser) {
       throw const PttSessionException('請先在「PTT 連線」返回主功能表，再重新整理看板。');
     }
-    await _readCommand('s', () => _boardEntryPrompt);
-    await _readCommand(
-      '$name\r',
-      () =>
-          _atBoard(name) ||
-          _readBlocked ||
-          screen.bottomText.contains('任意鍵') ||
-          _inArticle,
-    );
+    bool entered() =>
+        _atBoard(name) ||
+        _readBlocked ||
+        screen.bottomText.contains('任意鍵') ||
+        _inArticle;
+    if (!_chooserSelects(name)) {
+      await _readCommand('s', () => _boardEntryPrompt);
+      await _readCommand(
+        '$name\r',
+        () => !_boardEntryPrompt && (entered() || _inBoardChooser),
+      );
+    }
+    if (_chooserSelects(name)) {
+      // On favorites, search selects an existing row instead of entering it.
+      await _readCommand('\r', entered);
+    }
     // A board can display its entry note before showing the article list.
     for (var i = 0; i < 3 && !_atBoard(name) && !_readBlocked; i++) {
       if (_inArticle) {
@@ -462,6 +505,13 @@ class PttSession extends ChangeNotifier {
     }
     await _readCommand(' \x0c', () => _atBoard(target.board));
     await _readCommand('\r', () => _inArticle && !_atBoard(target.board));
+    if (!BbsArticlePage.parse(screen.text)!.atStart) {
+      // The server can restore this article's previous reading position.
+      await _readCommand(
+        '0\x0c',
+        () => BbsArticlePage.parse(screen.text)?.atStart == true,
+      );
+    }
     final pages = <BbsArticlePage>[];
     for (var i = 0; i < maxArticlePages; i++) {
       final page = BbsArticlePage.parse(screen.text);
@@ -481,7 +531,10 @@ class PttSession extends ChangeNotifier {
         }
         return article;
       }
-      await _readCommand('\x1b[6~', () => _inArticle);
+      await _readCommand(
+        '\x1b[6~',
+        () => BbsArticlePage.parse(screen.text)?.follows(page) == true,
+      );
     }
     throw const PttSessionException('文章過長，請使用「PTT 連線」繼續閱讀。');
   });

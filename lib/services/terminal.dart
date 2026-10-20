@@ -146,6 +146,7 @@ class TerminalScreen {
   bool _bold = false;
   String _escape = '';
   bool _osc = false, _oscEscape = false;
+  static final _symbolWidths = <int, int>{};
 
   List<TerminalCell> _blankLine() => List.filled(columns, const TerminalCell());
   String get text =>
@@ -241,6 +242,24 @@ class TerminalScreen {
         rune >= 0xfe00 && rune <= 0xfe0f) {
       return 0;
     }
+    // PTT still uses Big5 cell positions after negotiating UTF-8. Its arrows,
+    // box drawing, bullets and other legacy symbols occupy two columns too.
+    if (rune >= 0x80 && rune < 0x2e80) {
+      return _symbolWidths.putIfAbsent(rune, () {
+        final text = String.fromCharCode(rune);
+        try {
+          final bytes = Big5.encode(text);
+          if (bytes.length == 2 && Big5.decode(bytes) == text) return 2;
+        } catch (_) {
+          // Use the Unicode wide ranges below for characters outside Big5.
+        }
+        return _unicodeWidth(rune);
+      });
+    }
+    return _unicodeWidth(rune);
+  }
+
+  static int _unicodeWidth(int rune) {
     return rune >= 0x1100 &&
             (rune <= 0x115f ||
                 rune == 0x2329 ||

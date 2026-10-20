@@ -36,7 +36,7 @@ class PttWeb {
     if (!isPttUrl(url)) throw const PttWebException('無效的 PTT 文章或看板網址。');
     final request = http.Request('GET', url)..followRedirects = false;
     request.headers['User-Agent'] =
-        'ptt-client/0.1.1 (+https://github.com/chikenscrach/ptt-client)';
+        'ptt-client/0.1.2 (+https://github.com/chikenscrach/ptt-client)';
     if (over18) request.headers['Cookie'] = 'over18=1';
     try {
       final response = await _client

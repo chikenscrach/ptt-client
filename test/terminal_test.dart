@@ -69,4 +69,21 @@ void main() {
     }
     session.dispose();
   });
+  test('PTT Big5 symbols keep two cells after UTF-8 negotiation', () {
+    for (final rune in '─│●★□…ˇ←→'.runes) {
+      expect(
+        TerminalScreen.runeWidth(rune),
+        2,
+        reason: String.fromCharCode(rune),
+      );
+    }
+    final screen = TerminalScreen()..add('● 101 □ 中文…');
+    expect(screen.cells[0][1].text, '');
+    expect(screen.cells[0][3].text, '1');
+    expect(screen.cells[0][7].text, '□');
+    expect(screen.cells[0][8].text, '');
+    expect(screen.text.split('\n').first, '● 101 □ 中文…');
+    screen.add('\x1b[1;11H更新\x1b[K');
+    expect(screen.text.split('\n').first, '● 101 □ 更新');
+  });
 }

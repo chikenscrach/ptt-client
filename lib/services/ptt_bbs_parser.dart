@@ -9,10 +9,30 @@ class BbsListEntry {
 }
 
 class BbsArticlePage {
-  const BbsArticlePage(this.lines, this.firstLine, this.lastLine, this.atEnd);
+  const BbsArticlePage(
+    this.lines,
+    this.firstLine,
+    this.lastLine,
+    this.atEnd, {
+    this.pageNumber,
+  });
   final List<String> lines;
   final int? firstLine, lastLine;
   final bool atEnd;
+  final int? pageNumber;
+
+  bool get atStart => firstLine == 1 || firstLine == null && pageNumber == 1;
+
+  bool follows(BbsArticlePage previous) {
+    if (firstLine != null && previous.firstLine != null) {
+      return firstLine! > previous.firstLine!;
+    }
+    if (pageNumber != null && previous.pageNumber != null) {
+      return pageNumber! > previous.pageNumber! ||
+          pageNumber == previous.pageNumber && atEnd && !previous.atEnd;
+    }
+    return false;
+  }
 
   static BbsArticlePage? parse(String screen) {
     final rows = screen.split('\n');
@@ -24,6 +44,9 @@ class BbsArticlePage {
     final range = RegExp(r'第\s*(\d+)\s*[~～]\s*(\d+)\s*行').firstMatch(footer);
     final progress = RegExp(r'\(\s*(\d+)%\s*\)').firstMatch(footer);
     final pages = RegExp(r'第\s*(\d+)\s*/\s*(\d+)\s*頁').firstMatch(footer);
+    final page = RegExp(r'瀏覽\s*(?:第\s*|P\.\s*)(\d+)').firstMatch(footer);
+    // A label alone may be a fragmented redraw with its numbers still missing.
+    if (progress == null && pages == null) return null;
     final atEnd = progress != null
         ? int.parse(progress[1]!) >= 100
         : pages != null && pages[1] == pages[2];
@@ -32,6 +55,7 @@ class BbsArticlePage {
       range == null ? null : int.parse(range[1]!),
       range == null ? null : int.parse(range[2]!),
       atEnd,
+      pageNumber: page == null ? null : int.parse(page[1]!),
     );
   }
 }
@@ -101,8 +125,16 @@ class PttBbsParser {
     return Uri.https('www.ptt.cc', '/bbs/$board/M.$timestamp.A.$suffix.html');
   }
 
-  static bool titleMatches(String full, String abbreviated) =>
-      full.trimRight().startsWith(abbreviated.trimRight());
+  static bool titleMatches(String full, String abbreviated) {
+    final title = full.trimRight();
+    final preview = abbreviated.trimRight();
+    if (title == preview) return true;
+    // PTT's fixed-width list appends an ellipsis when a title does not fit.
+    final prefix = preview
+        .replaceFirst(RegExp(r'(?:…+|\.{2,})$'), '')
+        .trimRight();
+    return prefix.isNotEmpty && title.startsWith(prefix);
+  }
 
   static PttArticle article(
     List<BbsArticlePage> pages,
