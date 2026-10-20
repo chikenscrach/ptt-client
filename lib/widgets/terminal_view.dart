@@ -157,7 +157,9 @@ class _TerminalPainter extends CustomPainter {
               cellWidth,
               cellHeight,
             ),
-            Paint()..color = _colors[cell.bg],
+            Paint()
+              ..color = _colors[cell.bg]
+              ..isAntiAlias = false,
           );
         }
       }
