@@ -184,7 +184,7 @@ class LinkPreviewService {
       final request = http.Request('GET', url.removeFragment())
         ..followRedirects = false;
       request.headers['User-Agent'] =
-          'ptt-client/0.1 (+https://github.com/chikenscrach/ptt-client)';
+          'ptt-client/0.1.1 (+https://github.com/chikenscrach/ptt-client)';
       request.headers['Accept'] = imageOnly
           ? 'image/*'
           : 'text/html,image/*;q=0.9,*/*;q=0.5';

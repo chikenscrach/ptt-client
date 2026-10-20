@@ -620,7 +620,7 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
         const Divider(),
         const ListTile(
           title: Text('關於 PTT Client'),
-          subtitle: Text('0.1.0・Windows / Android\n獨立第三方客戶端，非 PTT 官方產品。'),
+          subtitle: Text('0.1.1・Windows / Android\n獨立第三方客戶端，非 PTT 官方產品。'),
         ),
         ListTile(
           title: const Text('專案與使用說明'),
@@ -634,7 +634,7 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
           onTap: () => showLicensePage(
             context: context,
             applicationName: 'PTT Client',
-            applicationVersion: '0.1.0',
+            applicationVersion: '0.1.1',
           ),
         ),
       ],
