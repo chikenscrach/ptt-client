@@ -1,0 +1,94 @@
+name: Check and build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_SUPPRESS_ANALYTICS: 'true'
+  FLUTTER_VERSION: '3.47.7'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disable Dart telemetry
+        run: |
+          mkdir -p "$HOME/.dart-tool"
+          printf 'reporting=0\n' > "$HOME/.dart-tool/dart-flutter-telemetry.config"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      - run: dart format --output=none --set-exit-if-changed lib test
+      - run: flutter analyze --no-pub
+      - run: flutter test --no-pub --reporter expanded
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disable Dart telemetry
+        run: |
+          mkdir -p "$HOME/.dart-tool"
+          printf 'reporting=0\n' > "$HOME/.dart-tool/dart-flutter-telemetry.config"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get --enforce-lockfile
+      # Test-installable APK. Store releases must use the owner's signing key.
+      - run: flutter build apk --debug --no-pub
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ptt-client-android-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  windows:
+    needs: check
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disable Dart telemetry
+        shell: pwsh
+        run: |
+          $telemetryDir = Join-Path $env:APPDATA '.dart-tool'
+          New-Item -ItemType Directory -Force -Path $telemetryDir | Out-Null
+          Set-Content -Path (Join-Path $telemetryDir 'dart-flutter-telemetry.config') -Value 'reporting=0'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - uses: NuGet/setup-nuget@v2
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build windows --release --no-pub
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ptt-client-windows-x64
+          path: build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 14
