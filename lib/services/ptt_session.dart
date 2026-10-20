@@ -307,6 +307,22 @@ class PttSession extends ChangeNotifier {
     if (RegExp(r'不存在|找不到').hasMatch(screen.bottomText)) {
       throw const PttSessionException('PTT 找不到此文章。');
     }
+    // Query the selected article's actual AID. A failed search can leave the
+    // cursor on another article with an identical title prefix.
+    screen.clear();
+    _send('Q');
+    await _wait(
+      () => screen.text.contains('再按') || screen.bottomText.contains('任意鍵'),
+    );
+    final identity = RegExp(
+      '${RegExp.escape(article.aid!)}\\s+\\(${RegExp.escape(article.board)}\\)',
+    );
+    if (!identity.hasMatch(screen.text)) {
+      throw const PttSessionException('站方回傳的文章代碼與目標不符，已停止操作；尚未送出推文。');
+    }
+    screen.clear();
+    _send(' ');
+    await _wait(() => RegExp(r'文章選讀|選讀').hasMatch(screen.text));
     screen.clear();
     _send('\r');
     await _wait(() => RegExp(r'文章瀏覽|瀏覽 第|目前顯示|作者\s').hasMatch(screen.text));

@@ -11,8 +11,9 @@ class ScriptedSocket extends Fake implements WebSocket {
     this.duplicate = false,
     this.loseConfirmation = false,
     this.wrongArticle = false,
+    this.wrongAid = false,
   });
-  final bool duplicate, loseConfirmation, wrongArticle;
+  final bool duplicate, loseConfirmation, wrongArticle, wrongAid;
   final incoming = StreamController<dynamic>();
   final writes = <String>[];
   var _open = true;
@@ -76,21 +77,30 @@ class ScriptedSocket extends Fake implements WebSocket {
         expect(value, '#1YM4nv0j\r');
         emit('看板《C_Chat》 文章選讀');
       case 5:
+        expect(value, 'Q');
+        emit(
+          '文章代碼(AID): ${wrongAid ? "#1YM4nv0k" : "#1YM4nv0j"} (C_Chat)',
+          '請按任意鍵繼續',
+        );
+      case 6:
+        expect(value, ' ');
+        emit('看板《C_Chat》 文章選讀');
+      case 7:
         expect(value, '\r');
         emit(
           '作者 tester1 看板 C_Chat\n標題 ${wrongArticle ? "[討論] another" : "[討論] test"}',
           '文章瀏覽 第 1/1 頁',
         );
-      case 6:
+      case 8:
         expect(value, 'X');
         emit('', '您覺得這篇文章 1.推 2.噓 3.→ [1]?');
-      case 7:
+      case 9:
         expect(value, '1');
         emit('', '推 tester1:');
-      case 8:
+      case 10:
         expect(value, '測試\r');
         emit('', '推 tester1:測試 確定[y/N]:');
-      case 9:
+      case 11:
         expect(value, 'y\r');
         if (!loseConfirmation) {
           emit('作者 tester1 看板 C_Chat\n標題 [討論] test', '文章瀏覽 第 1/1 頁');
@@ -150,6 +160,23 @@ void main() {
     await session.disconnect();
     session.dispose();
   });
+
+  test(
+    'a different AID is rejected even when the title is unchanged',
+    () async {
+      final socket = ScriptedSocket(wrongAid: true);
+      final session = PttSession(connector: () async => socket);
+      await session.login('tester1', 'test-only-password');
+      await expectLater(
+        session.postComment(article, 1, '測試'),
+        throwsA(predicate((error) => error.toString().contains('文章代碼與目標不符'))),
+      );
+      expect(socket.writes, isNot(contains('X')));
+      expect(socket.writes, isNot(contains('y\r')));
+      await session.disconnect();
+      session.dispose();
+    },
+  );
 
   test('unknown result after final confirmation never resends', () async {
     final socket = ScriptedSocket(loseConfirmation: true);
