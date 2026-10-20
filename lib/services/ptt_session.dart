@@ -276,15 +276,18 @@ class PttSession extends ChangeNotifier {
   Future<void> openArticle(ArticleSummary article) =>
       _exclusive(() => _navigate(article));
 
+  bool get _boardListCaption =>
+      RegExp(r'文章選讀|文章列表').hasMatch(screen.bottomText);
+
   bool _atBoard(String name) =>
-      screen.bottomText.contains('文章選讀') &&
+      _boardListCaption &&
       RegExp(
         '看板\\s*《\\s*${RegExp.escape(name)}\\s*》',
         caseSensitive: false,
       ).hasMatch(screen.text.split('\n').take(2).join('\n'));
 
   bool get _inBoardList =>
-      screen.bottomText.contains('文章選讀') &&
+      _boardListCaption &&
       RegExp(r'看板\s*《').hasMatch(screen.text.split('\n').take(2).join('\n'));
 
   bool get _inArticle => BbsArticlePage.parse(screen.text) != null;
@@ -491,7 +494,7 @@ class PttSession extends ChangeNotifier {
     // Never blindly send navigation keys into an editor or confirmation dialog.
     if (!_mainMenu &&
         !RegExp(
-          r'文章選讀|文章瀏覽|瀏覽 第|目前顯示|看板《|看板\s+《|我的最愛|看板列表',
+          r'文章選讀|文章列表|文章瀏覽|瀏覽 第|目前顯示|看板《|看板\s+《|我的最愛|看板列表',
         ).hasMatch(screen.text)) {
       throw const PttSessionException('請先在「PTT 連線」返回主功能表，再進行文章操作。');
     }
@@ -513,12 +516,12 @@ class PttSession extends ChangeNotifier {
       _send(' ');
       await _wait(() => screen.text.contains(article.board));
     }
-    if (!RegExp(r'文章選讀|選讀|看板《|看板\s+《').hasMatch(screen.text)) {
+    if (!RegExp(r'文章選讀|文章列表|選讀|看板《|看板\s+《').hasMatch(screen.text)) {
       throw const PttSessionException('尚未進入文章列表，請查看終端畫面的看板提示。');
     }
     screen.clear();
     _send('${article.aid}\r');
-    await _wait(() => RegExp(r'文章選讀|選讀|不存在|找不到').hasMatch(screen.text));
+    await _wait(() => RegExp(r'文章選讀|文章列表|選讀|不存在|找不到').hasMatch(screen.text));
     if (RegExp(r'不存在|找不到').hasMatch(screen.bottomText)) {
       throw const PttSessionException('PTT 找不到此文章。');
     }
@@ -537,7 +540,7 @@ class PttSession extends ChangeNotifier {
     }
     screen.clear();
     _send(' ');
-    await _wait(() => RegExp(r'文章選讀|選讀').hasMatch(screen.text));
+    await _wait(() => RegExp(r'文章選讀|文章列表|選讀').hasMatch(screen.text));
     screen.clear();
     _send('\r');
     await _wait(() => RegExp(r'文章瀏覽|瀏覽 第|目前顯示|作者\s').hasMatch(screen.text));

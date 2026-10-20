@@ -12,8 +12,11 @@ class ScriptedSocket extends Fake implements WebSocket {
     this.loseConfirmation = false,
     this.wrongArticle = false,
     this.wrongAid = false,
+    this.modernCaption = false,
   });
   final bool duplicate, loseConfirmation, wrongArticle, wrongAid;
+  final bool modernCaption;
+  String get listCaption => modernCaption ? '文章列表' : '文章選讀';
   final incoming = StreamController<dynamic>();
   final writes = <String>[];
   var _open = true;
@@ -72,10 +75,10 @@ class ScriptedSocket extends Fake implements WebSocket {
         emit('', '請輸入看板名稱：');
       case 3:
         expect(value, 'C_Chat\r');
-        emit('看板《C_Chat》 文章選讀');
+        emit('看板《C_Chat》 $listCaption');
       case 4:
         expect(value, '#1YM4nv0j\r');
-        emit('看板《C_Chat》 文章選讀');
+        emit('看板《C_Chat》 $listCaption');
       case 5:
         expect(value, 'Q');
         emit(
@@ -84,7 +87,7 @@ class ScriptedSocket extends Fake implements WebSocket {
         );
       case 6:
         expect(value, ' ');
-        emit('看板《C_Chat》 文章選讀');
+        emit('看板《C_Chat》 $listCaption');
       case 7:
         expect(value, '\r');
         emit(
@@ -147,6 +150,19 @@ void main() {
     await session.disconnect();
     session.dispose();
   });
+
+  test(
+    'article verification and push support the modern board-list caption',
+    () async {
+      final socket = ScriptedSocket(modernCaption: true);
+      final session = PttSession(connector: () async => socket);
+      await session.login('tester1', 'test-only-password');
+      await session.postComment(article, 1, '測試');
+      expect(socket.writes.where((v) => v == 'y\r').length, 1);
+      await session.disconnect();
+      session.dispose();
+    },
+  );
 
   test('wrong target article prevents any push command', () async {
     final socket = ScriptedSocket(wrongArticle: true);

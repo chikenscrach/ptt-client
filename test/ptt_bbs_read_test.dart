@@ -8,11 +8,14 @@ import 'package:ptt_client/services/ptt_bbs_parser.dart';
 import 'package:ptt_client/services/ptt_session.dart';
 
 class ReadingSocket extends Fake implements WebSocket {
+  ReadingSocket({this.modernCaption = false});
+  final bool modernCaption;
   final incoming = StreamController<dynamic>();
   final writes = <String>[];
   bool open = true, denied = false, mismatched = false;
   String board = 'C_Chat';
   int selected = 102;
+  String get caption => modernCaption ? '文章列表' : '文章選讀';
 
   @override
   int get readyState => open ? WebSocket.open : WebSocket.closed;
@@ -37,7 +40,7 @@ class ReadingSocket extends Fake implements WebSocket {
         '[←]離開 [→]閱讀',
         for (var i = selected - 2; i <= selected; i++)
           '${i == selected ? "●" : " "} $i + 1 10/19 tester1 □ [討論] older $i',
-      ], '文章選讀 (y)回應(X)推文');
+      ], '$caption (y)回應(X)推文');
       return;
     }
     emit([
@@ -48,7 +51,7 @@ class ReadingSocket extends Fake implements WebSocket {
       '${selected == 101 ? "●" : " "} 101 +爆 10/20 tester1 □ [討論] ${mismatched ? "other" : "test"}',
       '${selected == 102 ? "●" : " "} 102 m 9 10/20 tester2 R: [討論] newest',
       '  103     10/20 -       ╳ (本文已被刪除)',
-    ], '文章選讀 (y)回應(X)推文');
+    ], '$caption (y)回應(X)推文');
   }
 
   @override
@@ -249,6 +252,19 @@ void main() {
     expect(socket.writes, isNot(contains('Q')));
     expect(socket.writes, isNot(contains('\r')));
   });
+
+  test(
+    'modern board-list captions support reading and returning from an article',
+    () async {
+      final socket = ReadingSocket(modernCaption: true);
+      final session = await login(socket);
+      final board = await session.readBoard('C_Chat');
+      final result = await session.readArticle(board.articles[1]);
+      expect(result.summary.aid, '#1YM4nv0j');
+      final reloaded = await session.readBoard('C_Chat');
+      expect(reloaded.articles.length, 3);
+    },
+  );
 
   test(
     'pinned board entries retain separate positions and AID decoding is exact',
