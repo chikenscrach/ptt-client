@@ -365,7 +365,7 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
       Padding(
         padding: const EdgeInsets.all(16),
         child: Text(
-          '公開看板可直接閱讀\n登入後可使用 PTT 終端與發言',
+          '未登入時讀取公開網頁\n登入後直接由 PTT 連線閱讀',
           style: TextStyle(
             fontSize: 11,
             height: 1.7,
@@ -395,7 +395,7 @@ class _ShellState extends State<_Shell> with WidgetsBindingObserver {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '公開看板・${model.articles.length} 篇文章',
+                    '${model.boardFromSession ? "PTT 連線" : "公開看板"}・${model.articles.length} 篇文章',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],

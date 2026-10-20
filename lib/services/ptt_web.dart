@@ -36,7 +36,7 @@ class PttWeb {
     if (!isPttUrl(url)) throw const PttWebException('無效的 PTT 文章或看板網址。');
     final request = http.Request('GET', url)..followRedirects = false;
     request.headers['User-Agent'] =
-        'ptt-client/0.1 (+https://github.com/chikenscrach/ptt-client)';
+        'ptt-client/0.1.1 (+https://github.com/chikenscrach/ptt-client)';
     if (over18) request.headers['Cookie'] = 'over18=1';
     try {
       final response = await _client
@@ -51,6 +51,11 @@ class PttWeb {
       }
       if (response.statusCode != 200) {
         await response.stream.listen(null).cancel();
+        if (response.statusCode == 403) {
+          throw const PttWebException(
+            'PTT 公開網頁拒絕讀取（HTTP 403）。請到「PTT 連線」登入，登入後會直接讀取看板。',
+          );
+        }
         throw PttWebException('PTT 暫時無法讀取（HTTP ${response.statusCode}）。');
       }
       final bytes = <int>[];

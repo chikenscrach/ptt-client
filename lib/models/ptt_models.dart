@@ -25,10 +25,15 @@ class ArticleSummary {
     required this.score,
     required this.url,
     this.pinned = false,
+    this.bbsIndex,
+    this.bbsBottomOffset,
   });
   final String board, title, author, date, score;
   final Uri url;
   final bool pinned;
+  // BBS lists provide a board-local number before Q resolves a stable AID.
+  final int? bbsIndex, bbsBottomOffset;
+  bool get fromBbs => bbsIndex != null || bbsBottomOffset != null;
 
   String? get aid {
     final match = RegExp(

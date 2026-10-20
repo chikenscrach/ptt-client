@@ -41,7 +41,8 @@ class AppModel extends ChangeNotifier {
     username = prefs.getString('username') ?? '';
     selectedBoard = boards.firstOrNull?.name ?? 'C_Chat';
     this.web.over18 = prefs.getBool('over18') ?? false;
-    this.session.addListener(_changed);
+    _sessionWasLoggedIn = this.session.loggedIn;
+    this.session.addListener(_sessionChanged);
   }
 
   final SharedPreferences prefs;
@@ -59,11 +60,32 @@ class AppModel extends ChangeNotifier {
   ArticleSummary? selectedSummary;
   Uri? previousPage;
   bool loadingBoard = false, loadingArticle = false, loadingMore = false;
+  bool boardFromSession = false;
   String? boardError, articleError;
   int _boardRequest = 0, _articleRequest = 0;
   bool _disposed = false;
   DateTime? _connectivityChecked;
   bool _unmetered = false;
+  bool _sessionWasLoggedIn = false, _reloadAfterLogin = false;
+
+  void _sessionChanged() {
+    if (_disposed) return;
+    final loggedIn = session.loggedIn;
+    if (loggedIn && !_sessionWasLoggedIn) _reloadAfterLogin = true;
+    if (!loggedIn) _reloadAfterLogin = false;
+    _sessionWasLoggedIn = loggedIn;
+    if (_reloadAfterLogin && !session.busy) {
+      _reloadAfterLogin = false;
+      scheduleMicrotask(() {
+        if (!_disposed && session.loggedIn) {
+          // loadBoard records errors for the reader; an automatic reload cannot
+          // display the age-confirmation dialog used by explicit UI actions.
+          unawaited(loadBoard(selectedBoard).catchError((Object _) {}));
+        }
+      });
+    }
+    _changed();
+  }
 
   void _changed() {
     if (!_disposed) notifyListeners();
@@ -81,6 +103,7 @@ class AppModel extends ChangeNotifier {
     }
     final request = more ? _boardRequest : ++_boardRequest;
     final page = more ? previousPage : null;
+    final useSession = more ? page!.scheme == 'ptt-bbs' : session.loggedIn;
     if (more) {
       loadingMore = true;
     } else {
@@ -94,11 +117,14 @@ class AppModel extends ChangeNotifier {
       loadingArticle = false;
       loadingBoard = true;
       loadingMore = false;
+      boardFromSession = useSession;
     }
     boardError = null;
     _changed();
     try {
-      final result = await web.board(name, page: page);
+      final result = useSession
+          ? await session.readBoard(name, page: page)
+          : await web.board(name, page: page);
       if (request != _boardRequest || _disposed) return;
       final known = articles.map((a) => a.url.toString()).toSet();
       articles = [
@@ -129,11 +155,18 @@ class AppModel extends ChangeNotifier {
     articleError = null;
     _changed();
     try {
-      final result = await web.article(summary);
+      final result = session.loggedIn || summary.fromBbs
+          ? await session.readArticle(summary)
+          : await web.article(summary);
       if (request != _articleRequest || _disposed) return;
       article = result;
+      selectedSummary = result.summary;
+      articles = articles
+          .map((a) => a.url == summary.url ? result.summary : a)
+          .toList();
       read.remove(summary.url.toString());
-      read.add(summary.url.toString());
+      read.add(result.summary.url.toString());
+      if (summary.fromBbs) read.add(summary.url.toString());
       while (read.length > 500) {
         read.remove(read.first);
       }
@@ -228,7 +261,7 @@ class AppModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    session.removeListener(_changed);
+    session.removeListener(_sessionChanged);
     session.dispose();
     web.close();
     previews.close();
